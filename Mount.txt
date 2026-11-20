@@ -1,0 +1,186 @@
+-- Mount Ragnar | Auto Walk Script
+-- Platform: Roblox, Lua 5.1
+-- Executor: Synapse X / KRNL / Delta / Fluxus
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- ============ KONFIGURASI ============
+local CONFIG = {
+    AutoWalk = false,          -- toggle auto walk
+    WalkSpeed = 16,            -- kecepatan jalan (default 16)
+    AntiAFK = true,            -- cegah AFK kick
+    AutoJump = false,          -- lompat otomatis kalau kena rintangan
+    WalkDirection = Vector3.new(0, 0, -1), -- arah default: maju
+}
+-- =====================================
+
+-- GUI Sederhana
+local ScreenGui = Instance.new("ScreenGui")
+local Frame = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local BtnAutoWalk = Instance.new("TextButton")
+local BtnAutoJump = Instance.new("TextButton")
+local BtnAntiAFK = Instance.new("TextButton")
+local SpeedLabel = Instance.new("TextLabel")
+
+ScreenGui.Name = "MountRagnarHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = player.PlayerGui
+
+Frame.Size = UDim2.new(0, 220, 0, 220)
+Frame.Position = UDim2.new(0, 10, 0.5, -110)
+Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+Frame.Parent = ScreenGui
+
+-- Rounding
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = Frame
+
+Title.Size = UDim2.new(1, 0, 0, 36)
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.BackgroundColor3 = Color3.fromRGB(50, 50, 180)
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Text = "Mount Ragnar Hub"
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 14
+Title.Parent = Frame
+
+local function buatButton(label, posY)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.9, 0, 0, 36)
+    btn.Position = UDim2.new(0.05, 0, 0, posY)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Text = label .. ": OFF"
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 13
+    btn.BorderSizePixel = 0
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = btn
+    btn.Parent = Frame
+    return btn
+end
+
+BtnAutoWalk = buatButton("Auto Walk", 44)
+BtnAutoJump = buatButton("Auto Jump", 90)
+BtnAntiAFK  = buatButton("Anti AFK", 136)
+
+SpeedLabel.Size = UDim2.new(0.9, 0, 0, 24)
+SpeedLabel.Position = UDim2.new(0.05, 0, 0, 183)
+SpeedLabel.BackgroundTransparency = 1
+SpeedLabel.TextColor3 = Color3.fromRGB(180, 180, 255)
+SpeedLabel.Text = "Speed: " .. CONFIG.WalkSpeed
+SpeedLabel.Font = Enum.Font.Gotham
+SpeedLabel.TextSize = 12
+SpeedLabel.Parent = Frame
+
+-- Toggle logic
+local function toggleBtn(btn, state, label)
+    btn.Text = label .. ": " .. (state and "ON" or "OFF")
+    btn.BackgroundColor3 = state 
+        and Color3.fromRGB(40, 120, 40) 
+        or  Color3.fromRGB(40, 40, 60)
+end
+
+BtnAutoWalk.MouseButton1Click:Connect(function()
+    CONFIG.AutoWalk = not CONFIG.AutoWalk
+    toggleBtn(BtnAutoWalk, CONFIG.AutoWalk, "Auto Walk")
+    if CONFIG.AutoWalk then
+        humanoid.WalkSpeed = CONFIG.WalkSpeed
+    end
+end)
+
+BtnAutoJump.MouseButton1Click:Connect(function()
+    CONFIG.AutoJump = not CONFIG.AutoJump
+    toggleBtn(BtnAutoJump, CONFIG.AutoJump, "Auto Jump")
+end)
+
+BtnAntiAFK.MouseButton1Click:Connect(function()
+    CONFIG.AntiAFK = not CONFIG.AntiAFK
+    toggleBtn(BtnAntiAFK, CONFIG.AntiAFK, "Anti AFK")
+end)
+
+-- Set state awal
+toggleBtn(BtnAntiAFK, CONFIG.AntiAFK, "Anti AFK")
+
+-- ============ CORE FUNCTIONS ============
+
+-- Anti AFK: simulasi klik mouse tiap 2 menit
+local lastAFK = tick()
+RunService.Heartbeat:Connect(function()
+    if CONFIG.AntiAFK and tick() - lastAFK >= 120 then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new(0, 0))
+        lastAFK = tick()
+    end
+end)
+
+-- Auto Walk utama
+RunService.Heartbeat:Connect(function()
+    character = player.Character
+    if not character then return end
+    humanoid = character:FindFirstChild("Humanoid")
+    rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not rootPart then return end
+
+    if CONFIG.AutoWalk then
+        humanoid.WalkSpeed = CONFIG.WalkSpeed
+
+        -- Gerak ke arah depan karakter saat ini
+        local moveDir = rootPart.CFrame.LookVector
+        humanoid:Move(moveDir, false)
+    end
+end)
+
+-- Auto Jump: lompat kalau humanoid state sedang Running & kecepatan mendekati 0
+RunService.Heartbeat:Connect(function()
+    if not CONFIG.AutoJump then return end
+    character = player.Character
+    if not character then return end
+    humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid then return end
+
+    local state = humanoid:GetState()
+    local vel = humanoid.MoveDirection.Magnitude
+
+    if state == Enum.HumanoidStateType.Running and vel > 0.1 then
+        -- deteksi dinding / hambatan dari raycast
+        rootPart = character:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+            local origin = rootPart.Position
+            local direction = rootPart.CFrame.LookVector * 3
+            local rayParams = RaycastParams.new()
+            rayParams.FilterDescendantsInstances = {character}
+            rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+            local result = workspace:Raycast(origin, direction, rayParams)
+            if result then
+                humanoid.Jump = true
+            end
+        end
+    end
+end)
+
+-- Respawn handler: rebind setelah mati
+player.CharacterAdded:Connect(function(char)
+    character = char
+    humanoid = char:WaitForChild("Humanoid")
+    rootPart = char:WaitForChild("HumanoidRootPart")
+    humanoid.WalkSpeed = CONFIG.WalkSpeed
+end)
+
+print("[Mount Ragnar Hub] Script loaded. GUI aktif.")
